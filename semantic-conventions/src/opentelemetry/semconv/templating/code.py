@@ -41,6 +41,9 @@ def render_markdown(
     list_item=None,
     code=None,
 ):
+
+
+
     class CustomRender(mistune.HTMLRenderer):
         def link(self, url, text=None, title=None):  # pylint:disable=arguments-renamed
             if link:
@@ -83,9 +86,7 @@ def render_markdown(
             return super().block_code(code, info) if html else code
 
         def block_quote(self, text):
-            if block_quote:
-                return block_quote.format(text)
-            return super().block_quote(text)
+            return block_quote.format(text) if block_quote else super().block_quote(text)
 
         def list(self, text, ordered, level, start=None):
             if list:
@@ -102,6 +103,7 @@ def render_markdown(
                 return code.format(text)
             return super().codespan(text) if html else text
 
+
     markdown = mistune.create_markdown(renderer=CustomRender())
     return markdown(txt)
 
@@ -110,9 +112,7 @@ def to_doc_brief(doc_string: typing.Optional[str]) -> str:
     if doc_string is None:
         return ""
     doc_string = doc_string.strip()
-    if doc_string.endswith("."):
-        return doc_string[:-1]
-    return doc_string
+    return doc_string[:-1] if doc_string.endswith(".") else doc_string
 
 
 def to_html_links(doc_string: typing.Optional[typing.Union[str, TextWithLinks]]) -> str:
@@ -124,12 +124,10 @@ def to_html_links(doc_string: typing.Optional[typing.Union[str, TextWithLinks]])
             if isinstance(elm, str):
                 str_list.append(elm)
             else:
-                str_list.append('<a href="{}">{}</a>'.format(elm.url, elm.text))
+                str_list.append(f'<a href="{elm.url}">{elm.text}</a>')
         doc_string = "".join(str_list)
     doc_string = doc_string.strip()
-    if doc_string.endswith("."):
-        return doc_string[:-1]
-    return doc_string
+    return doc_string[:-1] if doc_string.endswith(".") else doc_string
 
 
 def regex_replace(text: str, pattern: str, replace: str):
@@ -184,7 +182,7 @@ class CodeRenderer:
             "semconvs": semconvset.models,
             "attributes": semconvset.attributes(),
         }
-        data.update(self.parameters)
+        data |= self.parameters
         return data
 
     def get_data_multiple_files(
@@ -192,7 +190,7 @@ class CodeRenderer:
     ) -> typing.Dict[str, typing.Any]:
         """Returns a dictionary with the data from a single SemanticConvention to fill the template."""
         data = {"template": template_path, "semconv": semconv}
-        data.update(self.parameters)
+        data |= self.parameters
         return data
 
     @staticmethod

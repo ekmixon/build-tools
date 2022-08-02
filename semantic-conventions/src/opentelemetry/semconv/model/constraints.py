@@ -45,9 +45,11 @@ class AnyOf:
     _yaml_src_position: int = 0
 
     def __eq__(self, other):
-        if not isinstance(other, AnyOf):
-            return False
-        return self.choice_list_ids == other.choice_list_ids
+        return (
+            self.choice_list_ids == other.choice_list_ids
+            if isinstance(other, AnyOf)
+            else False
+        )
 
     def __hash__(self):
         return hash(self.choice_list_ids)
@@ -85,9 +87,7 @@ def parse_constraints(yaml_constraints):
             for constraint_list in constraint.get("any_of"):
                 inner_id_list = ()
                 if isinstance(constraint_list, CommentedSeq):
-                    inner_id_list = tuple(
-                        attr_constraint for attr_constraint in constraint_list
-                    )
+                    inner_id_list = tuple(constraint_list)
                 else:
                     inner_id_list += (constraint_list,)
                 choice_sets += (inner_id_list,)

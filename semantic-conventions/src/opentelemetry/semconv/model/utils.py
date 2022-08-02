@@ -27,28 +27,24 @@ def validate_id(semconv_id, position):
     if not ID_RE.fullmatch(semconv_id):
         raise ValidationError.from_yaml_pos(
             position,
-            "Invalid id {}. Semantic Convention ids MUST match {}".format(
-                semconv_id, ID_RE.pattern
-            ),
+            f"Invalid id {semconv_id}. Semantic Convention ids MUST match {ID_RE.pattern}",
         )
 
 
 def validate_values(yaml, keys, mandatory=()):
     """This method checks only valid keywords and value types are used"""
-    unwanted = [k for k in yaml.keys() if k not in keys]
-    if unwanted:
+    if unwanted := [k for k in yaml.keys() if k not in keys]:
         position = yaml.lc.data[unwanted[0]]
-        msg = "Invalid keys: {}".format(unwanted)
+        msg = f"Invalid keys: {unwanted}"
         raise ValidationError.from_yaml_pos(position, msg)
     if mandatory:
         check_no_missing_keys(yaml, mandatory)
 
 
 def check_no_missing_keys(yaml, mandatory):
-    missing = list(set(mandatory) - set(yaml))
-    if missing:
+    if missing := list(set(mandatory) - set(yaml)):
         position = (yaml.lc.line, yaml.lc.col)
-        msg = "Missing keys: {}".format(missing)
+        msg = f"Missing keys: {missing}"
         raise ValidationError.from_yaml_pos(position, msg)
 
 
@@ -65,10 +61,9 @@ class ValidatableYamlNode:
 
     @classmethod
     def validate_keys(cls, node):
-        unwanted = [key for key in node.keys() if key not in cls.allowed_keys]
-        if unwanted:
+        if unwanted := [key for key in node.keys() if key not in cls.allowed_keys]:
             position = node.lc.data[unwanted[0]]
-            msg = "Invalid keys: {}".format(unwanted)
+            msg = f"Invalid keys: {unwanted}"
             raise ValidationError.from_yaml_pos(position, msg)
 
         if cls.mandatory_keys:

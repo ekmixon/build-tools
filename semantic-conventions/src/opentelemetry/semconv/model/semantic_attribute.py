@@ -117,15 +117,12 @@ class SemanticAttribute:
             if attr_id is not None:
                 validate_id(attr_id, position_data["id"])
                 attr_type, brief, examples = SemanticAttribute.parse_id(attribute)
-                if prefix:
-                    fqn = "{}.{}".format(prefix, attr_id)
-                else:
-                    fqn = attr_id
+                fqn = f"{prefix}.{attr_id}" if prefix else attr_id
             else:
                 # Ref
                 attr_type = None
                 if "type" in attribute:
-                    msg = "Ref attribute '{}' must not declare a type".format(ref)
+                    msg = f"Ref attribute '{ref}' must not declare a type"
                     raise ValidationError.from_yaml_pos(position, msg)
                 brief = attribute.get("brief")
                 examples = attribute.get("examples")
@@ -155,9 +152,7 @@ class SemanticAttribute:
                     raise ValidationError.from_yaml_pos(position, msg)
             if required is None:
                 position = position_data["required"]
-                msg = "Value '{}' for required field is not allowed".format(
-                    required_val
-                )
+                msg = f"Value '{required_val}' for required field is not allowed"
                 raise ValidationError.from_yaml_pos(position, msg)
             tag = attribute.get("tag", "").strip()
             stability, deprecated = SemanticAttribute.parse_stability_deprecated(
@@ -172,9 +167,8 @@ class SemanticAttribute:
                     if "stability" in position_data
                     else position_data["deprecated"]
                 )
-                msg = "Semantic convention stability set to deprecated but attribute '{}' is {}".format(
-                    attr_id, stability
-                )
+                msg = f"Semantic convention stability set to deprecated but attribute '{attr_id}' is {stability}"
+
                 raise ValidationError.from_yaml_pos(position, msg)
             stability = stability or semconv_stability or StabilityLevel.STABLE
             sampling_relevant = (
@@ -241,24 +235,28 @@ class SemanticAttribute:
             and not isinstance(examples, CommentedSeq)
         ):
             position = attribute.lc.data[list(attribute)[0]]
-            msg = "Non array examples for {} are not allowed".format(attr_type)
+            msg = f"Non array examples for {attr_type} are not allowed"
             raise ValidationError.from_yaml_pos(position, msg)
         if not isinstance(examples, CommentedSeq) and examples is not None:
             # TODO: If validation fails later, this will crash when trying to access position data
             # since a list, contrary to a CommentedSeq, does not have position data
             examples = [examples]
-        if is_simple_type and attr_type not in (
-            "boolean",
-            "boolean[]",
-            "int",
-            "int[]",
-            "double",
-            "double[]",
+        if (
+            is_simple_type
+            and attr_type
+            not in (
+                "boolean",
+                "boolean[]",
+                "int",
+                "int[]",
+                "double",
+                "double[]",
+            )
+            and not examples
         ):
-            if not examples:
-                position = attribute.lc.data[list(attribute)[0]]
-                msg = "Empty examples for {} are not allowed".format(attr_type)
-                raise ValidationError.from_yaml_pos(position, msg)
+            position = attribute.lc.data[list(attribute)[0]]
+            msg = f"Empty examples for {attr_type} are not allowed"
+            raise ValidationError.from_yaml_pos(position, msg)
 
         # TODO: Implement type check for enum examples or forbid them
         if examples is not None and is_simple_type:
@@ -272,9 +270,8 @@ class SemanticAttribute:
         if deprecated is not None:
             if stability is not None and stability != "deprecated":
                 position = position_data["deprecated"]
-                msg = "There is a deprecation message but the stability is set to '{}'".format(
-                    stability
-                )
+                msg = f"There is a deprecation message but the stability is set to '{stability}'"
+
                 raise ValidationError.from_yaml_pos(position, msg)
             if AttributeType.get_type(deprecated) != "string" or deprecated == "":
                 position = position_data["deprecated"]
@@ -304,16 +301,16 @@ class SemanticAttribute:
         val = stability_value_map.get(stability_value)
         if val is not None:
             return val
-        msg = "Value '{}' is not allowed as a stability marker".format(stability_value)
+        msg = f"Value '{stability_value}' is not allowed as a stability marker"
         raise ValidationError.from_yaml_pos(position, msg)
 
     def equivalent_to(self, other: "SemanticAttribute"):
-        if self.attr_id is not None:
-            if self.fqn == other.fqn:
-                return True
-        elif self == other:
-            return True
-        return False
+        return (
+            self.attr_id is not None
+            and self.fqn == other.fqn
+            or self.attr_id is None
+            and self == other
+        )
 
 
 class AttributeType:
@@ -327,13 +324,11 @@ class AttributeType:
     def get_type(t):
         if isinstance(t, int):
             return "int"
-        if AttributeType.bool_type.fullmatch(t):
-            return "boolean"
-        return "string"
+        return "boolean" if AttributeType.bool_type.fullmatch(t) else "string"
 
     @staticmethod
     def is_simple_type(attr_type: str):
-        return attr_type in (
+        return attr_type in {
             "string",
             "string[]",
             "int",
@@ -342,7 +337,7 @@ class AttributeType:
             "double[]",
             "boolean",
             "boolean[]",
-        )
+        }
 
     @staticmethod
     def type_mapper(attr_type: str):
@@ -361,25 +356,20 @@ class AttributeType:
     @staticmethod
     def check_examples_type(attr_type, examples, zlass):
         """This method checks example are correctly typed"""
-        index = -1
-        for example in examples:
-            index += 1
+        for index, example in enumerate(examples):
             if attr_type.endswith("[]") and isinstance(example, Iterable):
                 # Multi array example
                 for element in example:
                     if not isinstance(element, zlass):
                         position = examples.lc.data[index]
-                        msg = "Example with wrong type. Expected {} examples but is was {}.".format(
-                            attr_type, type(element)
-                        )
+                        msg = f"Example with wrong type. Expected {attr_type} examples but is was {type(element)}."
+
                         raise ValidationError.from_yaml_pos(position, msg)
-            else:  # Single value example or array example with a single example array
-                if not isinstance(example, zlass):
-                    position = examples.lc.data[index]
-                    msg = "Example with wrong type. Expected {} examples but is was {}.".format(
-                        attr_type, type(example)
-                    )
-                    raise ValidationError.from_yaml_pos(position, msg)
+            elif not isinstance(example, zlass):
+                position = examples.lc.data[index]
+                msg = f"Example with wrong type. Expected {attr_type} examples but is was {type(example)}."
+
+                raise ValidationError.from_yaml_pos(position, msg)
 
     @staticmethod
     def to_bool(key, parent_object):
@@ -393,7 +383,7 @@ class AttributeType:
             if AttributeType.bool_type_false.fullmatch(yaml_value):
                 return False
         position = parent_object.lc.data[key]
-        msg = "Value '{}' for {} field is not allowed".format(yaml_value, key)
+        msg = f"Value '{yaml_value}' for {key} field is not allowed"
         raise ValidationError.from_yaml_pos(position, msg)
 
 
@@ -425,9 +415,7 @@ class EnumAttributeType:
             if AttributeType.is_simple_type(attribute_type):
                 return attribute_type
             # Wrong type used - raise the exception and fill the missing data in the parent
-            raise ValidationError(
-                0, 0, "Invalid type: {} is not allowed".format(attribute_type)
-            )
+            raise ValidationError(0, 0, f"Invalid type: {attribute_type} is not allowed")
         allowed_keys = ["allow_custom_values", "members"]
         mandatory_keys = ["members"]
         validate_values(attribute_type, allowed_keys, mandatory_keys)
@@ -452,8 +440,9 @@ class EnumAttributeType:
             if not EnumAttributeType.is_valid_enum_value(member["value"]):
                 raise ValidationError.from_yaml_pos(
                     member.lc.data["value"][:2],
-                    "Invalid value used in enum: <{}>".format(member["value"]),
+                    f'Invalid value used in enum: <{member["value"]}>',
                 )
+
             validate_id(member["id"], member.lc.data["id"])
             members.append(
                 EnumMember(
@@ -468,8 +457,9 @@ class EnumAttributeType:
             if enum_type != AttributeType.get_type(m.value):
                 raise ValidationError.from_yaml_pos(
                     myaml.lc.data["value"],
-                    "Enumeration member does not have type {}!".format(enum_type),
+                    f"Enumeration member does not have type {enum_type}!",
                 )
+
         return EnumAttributeType(custom_values, members, enum_type)
 
 
@@ -490,7 +480,7 @@ class MdLink:
         self.url = url
 
     def __str__(self):
-        return "[{}]({})".format(self.text, self.url)
+        return f"[{self.text}]({self.url})"
 
 
 class TextWithLinks(str):
@@ -510,12 +500,9 @@ class TextWithLinks(str):
                 self.parts.append(prev_text)
             self.parts.append(link)
             last_position = match.end() + 1
-        last_part = text[last_position:]
-        if last_part:
+        if last_part := text[last_position:]:
             self.parts.append(last_part)
 
     def __str__(self):
-        str_list = []
-        for elm in self.parts:
-            str_list.append(elm.__str__())
+        str_list = [elm.__str__() for elm in self.parts]
         return "".join(str_list)

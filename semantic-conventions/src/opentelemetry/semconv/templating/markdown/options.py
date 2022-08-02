@@ -43,6 +43,4 @@ class MarkdownOptions:
 
     @property
     def md_snippet_by_stability_level(self):
-        if self.use_badge:
-            return self._badge_map
-        return self._label_map
+        return self._badge_map if self.use_badge else self._label_map

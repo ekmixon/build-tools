@@ -137,9 +137,7 @@ class TestCorrectMarkdown(unittest.TestCase):
     ) -> Optional[BaseException]:
         dirpath = Path(self.get_file_path(input_dir))
         if not dirpath.is_dir():
-            raise ValueError(
-                "Input dir does not exist (or is not a dir): " + str(dirpath)
-            )
+            raise ValueError(f"Input dir does not exist (or is not a dir): {str(dirpath)}")
         semconv = SemanticConventionSet(debug=True)
         for fname in dirpath.glob("*.yaml"):
             print("Parsing", fname)

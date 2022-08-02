@@ -62,10 +62,7 @@ def parse_semantic_convention_type(type_value):
 
 def parse_semantic_convention_groups(yaml_file):
     yaml = YAML().load(yaml_file)
-    models = []
-    for group in yaml["groups"]:
-        models.append(SemanticConvention(group))
-    return models
+    return [SemanticConvention(group) for group in yaml["groups"]]
 
 
 def SemanticConvention(group):
@@ -73,16 +70,15 @@ def SemanticConvention(group):
     if type_value is None:
         line = group.lc.data["id"][1] + 1
         print(
-            "Using default SPAN type for semantic convention '{}' @ line {}".format(
-                group["id"], line
-            ),
+            f"""Using default SPAN type for semantic convention '{group["id"]}' @ line {line}""",
             file=sys.stderr,
         )
+
 
     convention_type = parse_semantic_convention_type(type_value)
     if convention_type is None:
         position = group.lc.data["type"] if "type" in group else group.lc.data["id"]
-        msg = "Invalid value for semantic convention type: {}".format(group.get("type"))
+        msg = f'Invalid value for semantic convention type: {group.get("type")}'
         raise ValidationError.from_yaml_pos(position, msg)
 
     # First, validate that the correct fields are available in the yaml
@@ -112,10 +108,11 @@ class BaseSemanticConvention(ValidatableYamlNode):
 
     @property
     def attributes(self):
-        if not hasattr(self, "attrs_by_name"):
-            return []
-
-        return list(self.attrs_by_name.values())
+        return (
+            list(self.attrs_by_name.values())
+            if hasattr(self, "attrs_by_name")
+            else []
+        )
 
     def __init__(self, group):
         super().__init__(group)
@@ -138,9 +135,8 @@ class BaseSemanticConvention(ValidatableYamlNode):
 
     def contains_attribute(self, attr: "SemanticAttribute"):
         for local_attr in self.attributes:
-            if local_attr.attr_id is not None:
-                if local_attr.fqn == attr.fqn:
-                    return True
+            if local_attr.attr_id is not None and local_attr.fqn == attr.fqn:
+                return True
             if local_attr == attr:
                 return True
         return False
@@ -164,11 +160,11 @@ class BaseSemanticConvention(ValidatableYamlNode):
         )
 
     def any_of(self):
-        result = []
-        for constraint in self.constraints:
-            if isinstance(constraint, AnyOf):
-                result.append(constraint)
-        return result
+        return [
+            constraint
+            for constraint in self.constraints
+            if isinstance(constraint, AnyOf)
+        ]
 
     def has_attribute_constraint(self, attr):
         return any(
@@ -202,7 +198,7 @@ class SpanSemanticConvention(BaseSemanticConvention):
         self.span_kind = SpanKind.parse(group.get("span_kind"))
         if self.span_kind is None:
             position = group.lc.data["span_kind"]
-            msg = "Invalid value for span_kind: {}".format(group.get("span_kind"))
+            msg = f'Invalid value for span_kind: {group.get("span_kind")}'
             raise ValidationError.from_yaml_pos(position, msg)
 
 
@@ -258,17 +254,16 @@ class SemanticConventionSet:
                 for model in semconv_models:
                     if model.semconv_id in self.models:
                         self.errors = True
-                        print("Error parsing {}\n".format(file), file=sys.stderr)
+                        print(f"Error parsing {file}\n", file=sys.stderr)
                         print(
-                            "Semantic convention '{}' is already defined.".format(
-                                model.semconv_id
-                            ),
+                            f"Semantic convention '{model.semconv_id}' is already defined.",
                             file=sys.stderr,
                         )
+
                     self.models[model.semconv_id] = model
             except ValidationError as e:
                 self.errors = True
-                print("Error parsing {}\n".format(file), file=sys.stderr)
+                print(f"Error parsing {file}\n", file=sys.stderr)
                 print(e, file=sys.stderr)
 
     def has_error(self):
@@ -282,11 +277,10 @@ class SemanticConventionSet:
                     if attr.fqn in group_by_fqn:
                         self.errors = True
                         print(
-                            "Attribute {} of Semantic convention '{}' is already defined in {}.".format(
-                                attr.fqn, model.semconv_id, group_by_fqn.get(attr.fqn)
-                            ),
+                            f"Attribute {attr.fqn} of Semantic convention '{model.semconv_id}' is already defined in {group_by_fqn.get(attr.fqn)}.",
                             file=sys.stderr,
                         )
+
                     group_by_fqn[attr.fqn] = model.semconv_id
 
     def finish(self):
@@ -342,10 +336,9 @@ class SemanticConventionSet:
             if extended is None:
                 raise ValidationError.from_yaml_pos(
                     semconv._position,
-                    "Semantic Convention {} extends {} but the latter cannot be found!".format(
-                        semconv.semconv_id, semconv.extends
-                    ),
+                    f"Semantic Convention {semconv.semconv_id} extends {semconv.extends} but the latter cannot be found!",
                 )
+
 
             # Process hierarchy chain
             not_yet_processed = extended.extends in unprocessed
@@ -364,13 +357,16 @@ class SemanticConventionSet:
                 ):
                     semconv.constraints += (constraint.inherit_anyof(),)
             # Attributes
-            parent_attributes = {}
-            for ext_attr in extended.attributes:
-                parent_attributes[ext_attr.fqn] = ext_attr.inherit_attribute()
+            parent_attributes = {
+                ext_attr.fqn: ext_attr.inherit_attribute()
+                for ext_attr in extended.attributes
+            }
+
             # By induction, parent semconv is already correctly sorted
-            parent_attributes.update(
-                SemanticConventionSet._sort_attributes_dict(semconv.attrs_by_name)
+            parent_attributes |= SemanticConventionSet._sort_attributes_dict(
+                semconv.attrs_by_name
             )
+
             if parent_attributes or semconv.attributes:
                 semconv.attrs_by_name = parent_attributes
         elif semconv.attributes:  # No parent, sort of current attributes
@@ -406,10 +402,9 @@ class SemanticConventionSet:
                         if ref_attr is None:
                             raise ValidationError.from_yaml_pos(
                                 any_of._yaml_src_position[index],
-                                "Any_of attribute '{}' of semantic convention {} does not exists!".format(
-                                    attr_id, semconv.semconv_id
-                                ),
+                                f"Any_of attribute '{attr_id}' of semantic convention {semconv.semconv_id} does not exists!",
                             )
+
                         constraint_attrs.append(ref_attr)
                     if constraint_attrs:
                         any_of.add_attributes(constraint_attrs)
@@ -422,18 +417,15 @@ class SemanticConventionSet:
                 if event is None:
                     raise ValidationError.from_yaml_pos(
                         semconv._position,
-                        "Semantic Convention {} has {} as event but the latter cannot be found!".format(
-                            semconv.semconv_id, event_id
-                        ),
+                        f"Semantic Convention {semconv.semconv_id} has {event_id} as event but the latter cannot be found!",
                     )
+
                 if not isinstance(event, EventSemanticConvention):
                     raise ValidationError.from_yaml_pos(
                         semconv._position,
-                        "Semantic Convention {} has {} as event but"
-                        " the latter is not a semantic convention for events!".format(
-                            semconv.semconv_id, event_id
-                        ),
+                        f"Semantic Convention {semconv.semconv_id} has {event_id} as event but the latter is not a semantic convention for events!",
                     )
+
                 events.append(event)
             semconv.events = events
 
@@ -448,10 +440,9 @@ class SemanticConventionSet:
                 if not ref_attr:
                     raise ValidationError.from_yaml_pos(
                         semconv._position,
-                        "Semantic Convention {} reference `{}` but it cannot be found!".format(
-                            semconv.semconv_id, attr.ref
-                        ),
+                        f"Semantic Convention {semconv.semconv_id} reference `{attr.ref}` but it cannot be found!",
                     )
+
                 attr.attr_type = ref_attr.attr_type
                 if not attr.brief:
                     attr.brief = ref_attr.brief
@@ -471,10 +462,9 @@ class SemanticConventionSet:
                 if include_semconv is None:
                     raise ValidationError.from_yaml_pos(
                         semconv._position,
-                        "Semantic Convention {} includes {} but the latter cannot be found!".format(
-                            semconv.semconv_id, constraint.semconv_id
-                        ),
+                        f"Semantic Convention {semconv.semconv_id} includes {constraint.semconv_id} but the latter cannot be found!",
                     )
+
                 # We resolve the parent/child relationship of the included semantic convention, if any
                 self._populate_extends_single(
                     include_semconv, {include_semconv.semconv_id: include_semconv}
@@ -483,11 +473,7 @@ class SemanticConventionSet:
                 for attr in include_semconv.attributes:
                     if semconv.contains_attribute(attr):
                         if self.debug:
-                            print(
-                                "[Includes] {} already contains attribute {}".format(
-                                    semconv.semconv_id, attr
-                                )
-                            )
+                            print(f"[Includes] {semconv.semconv_id} already contains attribute {attr}")
                         continue
                     # There are changes
                     fixpoint_inc = False
